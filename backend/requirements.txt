@@ -1,0 +1,32 @@
+# ---- Web framework ----
+fastapi>=0.115,<0.116
+uvicorn[standard]>=0.34,<0.35
+python-multipart>=0.0.20
+pydantic>=2.10,<3
+pydantic-settings>=2.7,<3
+email-validator>=2,<3
+
+# ---- Database / ORM / migrations ----
+SQLAlchemy>=2.0.36,<2.1
+psycopg[binary]>=3.2,<4
+pgvector>=0.3.6,<0.4
+alembic>=1.14,<2
+
+# ---- Auth ----
+python-jose[cryptography]>=3.3,<4
+passlib>=1.7.4,<2
+bcrypt==4.0.1
+
+# ---- LLM providers ----
+anthropic>=0.42,<1
+openai>=1.59,<2
+
+# ---- Embeddings (local, ONNX, CPU) ----
+fastembed>=0.5,<0.6
+
+# ---- Document extraction ----
+PyMuPDF>=1.25,<2          # text extraction (imported as `fitz`)
+pdf2image>=1.17,<2        # page rendering (needs poppler)
+pytesseract>=0.3.13,<0.4  # OCR (needs Tesseract)
+pillow>=10.3,<11         # capped <11 to satisfy fastembed 0.5.x
+ultralytics>=8.3,<9       # YOLOv8 layout detection
