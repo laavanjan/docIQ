@@ -1,0 +1,62 @@
+# One-command local stack: Postgres (pgvector) + FastAPI backend + Next.js frontend.
+# Copy .env.example to .env and set ANTHROPIC_API_KEY (and optionally OPENAI_API_KEY).
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: docanalysis
+      POSTGRES_PASSWORD: docanalysis
+      POSTGRES_DB: docanalysis
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docanalysis"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://docanalysis:docanalysis@postgres:5432/docanalysis
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      LLM_PRIMARY: ${LLM_PRIMARY:-anthropic}
+      LLM_FALLBACK_ENABLED: ${LLM_FALLBACK_ENABLED:-true}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      YOLO_ENABLED: ${YOLO_ENABLED:-true}
+      YOLO_MODEL_PATH: ${YOLO_MODEL_PATH:-yolov8n.pt}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-false}
+      UPLOAD_DIR: /app/data/uploads
+      LOG_DIR: /app/logs
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/app/data/uploads
+      - logs:/app/logs
+      - model_cache:/root/.cache   # fastembed / ultralytics / HF model downloads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
+  uploads:
+  logs:
+  model_cache:
