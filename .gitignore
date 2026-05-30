@@ -1,0 +1,37 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ---- App data / logs ----
+backend/data/
+backend/logs/
+*.log
+
+# ---- Node / Next.js ----
+node_modules/
+.next/
+frontend/.env.local
+frontend/.env*.local
+next-env.d.ts.bak
+
+# ---- Misc ----
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.pytest_cache/
+logs/*.log
