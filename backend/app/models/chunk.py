@@ -42,7 +42,7 @@ class Chunk(UUIDMixin, TimestampMixin, Base):
     embedding: Mapped[list[float]] = mapped_column(Vector(settings.embedding_dim), nullable=False)
     meta: Mapped[dict] = mapped_column(JSONB, default=dict)
 
-    document: Mapped["Document"] = relationship(back_populates="chunks")
+    document: Mapped[Document] = relationship(back_populates="chunks")
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"<Chunk doc={self.document_id} idx={self.chunk_index} page={self.page_number}>"

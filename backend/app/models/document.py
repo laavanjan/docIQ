@@ -41,8 +41,8 @@ class Document(UUIDMixin, TimestampMixin, Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    owner: Mapped["User"] = relationship(back_populates="documents")
-    chunks: Mapped[list["Chunk"]] = relationship(
+    owner: Mapped[User] = relationship(back_populates="documents")
+    chunks: Mapped[list[Chunk]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
 

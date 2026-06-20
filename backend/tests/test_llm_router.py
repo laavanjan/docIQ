@@ -73,7 +73,7 @@ def test_raises_when_no_provider_available(monkeypatch):
         FakeProvider("openai", available=False),
         monkeypatch,
     )
-    with pytest.raises(Exception):
+    with pytest.raises(LLMError):
         router.complete(system="", messages=[user_text("q")])
 
 

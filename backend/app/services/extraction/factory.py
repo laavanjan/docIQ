@@ -16,4 +16,6 @@ def get_extractor(method: str) -> Extractor:
         return OCRExtractor()
     if method == ExtractionMethod.VISION:
         return VisionExtractor()
-    raise ValueError(f"Unknown extraction method: {method!r}. Expected one of {ExtractionMethod.ALL}.")
+    raise ValueError(
+        f"Unknown extraction method: {method!r}. Expected one of {ExtractionMethod.ALL}."
+    )

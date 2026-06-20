@@ -25,7 +25,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def _create_token(subject: str, token_type: str, expires_delta: _dt.timedelta) -> str:
-    now = _dt.datetime.now(_dt.timezone.utc)
+    now = _dt.datetime.now(_dt.UTC)
     payload: dict[str, Any] = {
         "sub": subject,
         "type": token_type,

@@ -24,7 +24,8 @@ def test_register_login_me_flow(client, db_required):
     tokens = res.json()
     assert tokens["token_type"] == "bearer"
 
-    res = client.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {tokens['access_token']}"})
+    auth_header = {"Authorization": f"Bearer {tokens['access_token']}"}
+    res = client.get(f"{API}/auth/me", headers=auth_header)
     assert res.status_code == 200
     assert res.json()["email"] == email
 

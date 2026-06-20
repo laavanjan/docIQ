@@ -165,5 +165,8 @@ def delete_document(
         logger.warning("could not delete file for document %s", document_id)
     db.delete(document)  # cascades to chunks
     db.commit()
-    logger.info("document deleted", extra={"event": "document.delete", "document_id": str(document_id)})
+    logger.info(
+        "document deleted",
+        extra={"event": "document.delete", "document_id": str(document_id)},
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

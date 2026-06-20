@@ -43,7 +43,10 @@ def register(payload: UserCreate, db: DbSession) -> User:
 def login(db: DbSession, form_data: OAuth2PasswordRequestForm = Depends()) -> Token:
     user = db.scalar(select(User).where(User.email == form_data.username.lower()))
     if not user or not verify_password(form_data.password, user.hashed_password):
-        logger.warning("login failed", extra={"event": "auth.login_failed", "email": form_data.username})
+        logger.warning(
+            "login failed",
+            extra={"event": "auth.login_failed", "email": form_data.username},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -72,7 +75,9 @@ def refresh(payload: RefreshRequest, db: DbSession) -> Token:
 
     user = db.get(User, user_id)
     if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        )
     return Token(
         access_token=create_access_token(str(user.id)),
         refresh_token=create_refresh_token(str(user.id)),

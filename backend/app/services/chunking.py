@@ -87,7 +87,9 @@ class Chunker:
         index = 0
         for page in pages:
             for piece in self._split_text(page.text):
-                chunks.append(ChunkData(chunk_index=index, page_number=page.page_number, content=piece))
+                chunks.append(
+                    ChunkData(chunk_index=index, page_number=page.page_number, content=piece)
+                )
                 index += 1
         log_event(
             logger,

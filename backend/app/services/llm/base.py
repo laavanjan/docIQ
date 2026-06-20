@@ -71,7 +71,9 @@ def user_text(text: str) -> Message:
     return Message(role="user", blocks=[TextBlock(text)])
 
 
-def user_text_and_images(text: str, images: Sequence[bytes], media_type: str = "image/png") -> Message:
+def user_text_and_images(
+    text: str, images: Sequence[bytes], media_type: str = "image/png"
+) -> Message:
     blocks: list[ContentBlock] = [TextBlock(text)]
     blocks.extend(ImageBlock(data=img, media_type=media_type) for img in images)
     return Message(role="user", blocks=blocks)

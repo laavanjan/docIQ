@@ -41,7 +41,9 @@ class LLMRouter:
         order = [primary]
         if settings.llm_fallback_enabled:
             order.append(secondary)
-        available = [self._providers[name] for name in order if self._providers[name].is_available()]
+        available = [
+            self._providers[name] for name in order if self._providers[name].is_available()
+        ]
         return available
 
     def complete(
