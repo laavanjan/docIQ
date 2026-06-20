@@ -3,323 +3,406 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Document Analysis Platform — How it works</title>
-<meta name="description" content="From a single module to the high-level feature: how the Document Analysis Platform extracts, embeds, and answers questions about your PDFs with Claude + RAG over pgvector." />
+<title>Document Analysis Platform — Technical Overview</title>
+<meta name="description" content="A RAG platform for PDFs: selectable Text/OCR/Vision extraction, local fastembed embeddings, pgvector retrieval, and answers from Claude with an automatic OpenAI fallback — every answer cited to the page." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#f6f8ff;
-    --bg-2:#eef3ff;
-    --ink:#1b2240;
-    --ink-soft:#5a6385;
-    --line:#e4e9fb;
-    --card:#ffffff;
-    --violet:#7c5cff;
-    --violet-soft:#efe9ff;
-    --pink:#ff5ca8;
-    --pink-soft:#ffe6f2;
-    --teal:#11c5b8;
-    --teal-soft:#d8fbf7;
-    --amber:#ffb020;
-    --amber-soft:#fff2d6;
-    --blue:#3d7bff;
-    --blue-soft:#e2ecff;
-    --green:#22c55e;
-    --green-soft:#dcfce7;
-    --radius:18px;
-    --shadow:0 14px 40px -18px rgba(70,80,160,.45);
-    --shadow-sm:0 6px 18px -10px rgba(70,80,160,.4);
-    --maxw:1120px;
+    --blue:#1a73e8;
+    --blue-dark:#174ea6;
+    --blue-50:#e8f0fe;
+    --blue-100:#d2e3fc;
+    --ink:#202124;
+    --g700:#3c4043;
+    --g600:#5f6368;
+    --g500:#80868b;
+    --g300:#dadce0;
+    --g200:#e8eaed;
+    --g100:#f1f3f4;
+    --bg:#ffffff;
+    --bg-alt:#f8f9fa;
+    --green:#188038;
+    --yellow:#e37400;
+    --red:#d93025;
+    --teal:#12a4af;
+    --purple:#7b3ff2;
+    --code-bg:#202124;
+    --radius:8px;
+    --maxw:1180px;
+    --font:"Roboto","Google Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    --mono:"Roboto Mono","SF Mono",Consolas,"Liberation Mono",monospace;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{
-    margin:0;
-    font-family:"Segoe UI",Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-    color:var(--ink);
-    background:
-      radial-gradient(1100px 700px at 12% -8%, #fae6ff 0%, transparent 55%),
-      radial-gradient(1000px 650px at 100% 0%, #d9ecff 0%, transparent 50%),
-      radial-gradient(900px 700px at 50% 120%, #d6fbf4 0%, transparent 55%),
-      var(--bg);
-    line-height:1.6;
-    -webkit-font-smoothing:antialiased;
+    margin:0;font-family:var(--font);color:var(--g700);background:var(--bg);
+    line-height:1.6;-webkit-font-smoothing:antialiased;font-size:16px;
   }
-  a{color:var(--violet);text-decoration:none}
+  a{color:var(--blue);text-decoration:none}
   a:hover{text-decoration:underline}
-  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+  h1,h2,h3,h4{color:var(--ink);font-weight:500;letter-spacing:-.01em;margin:0}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  code,kbd{font-family:var(--mono)}
 
-  /* ===== Nav ===== */
-  header.nav{
-    position:sticky;top:0;z-index:50;
-    backdrop-filter:saturate(1.4) blur(12px);
-    background:rgba(255,255,255,.72);
-    border-bottom:1px solid var(--line);
-  }
-  .nav-inner{display:flex;align-items:center;gap:18px;height:64px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em}
-  .logo{
-    width:34px;height:34px;border-radius:10px;flex:none;
-    background:linear-gradient(135deg,var(--violet),var(--pink));
-    display:grid;place-items:center;color:#fff;font-size:18px;
-    box-shadow:0 8px 18px -8px var(--violet);
-  }
-  .nav-links{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
-  .nav-links a{
-    color:var(--ink-soft);font-weight:600;font-size:.92rem;
-    padding:8px 12px;border-radius:10px;transition:.2s;
-  }
-  .nav-links a:hover{background:var(--violet-soft);color:var(--violet);text-decoration:none}
+  /* ---------- Top nav ---------- */
+  header.nav{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.92);
+    backdrop-filter:saturate(1.6) blur(8px);border-bottom:1px solid var(--g200)}
+  .nav-in{display:flex;align-items:center;gap:28px;height:60px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:500;color:var(--ink);font-size:17px}
+  .brand svg{display:block}
+  .nav-links{display:flex;gap:4px;margin-left:8px}
+  .nav-links a{color:var(--g600);font-size:14px;padding:8px 12px;border-radius:6px;font-weight:500}
+  .nav-links a:hover{background:var(--g100);color:var(--ink);text-decoration:none}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .gh-btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--g300);
+    color:var(--g700);font-size:14px;font-weight:500;padding:8px 14px;border-radius:6px}
+  .gh-btn:hover{background:var(--g100);text-decoration:none;border-color:var(--g500)}
+  @media(max-width:900px){.nav-links{display:none}}
 
-  /* ===== Hero ===== */
-  .hero{padding:84px 0 54px;text-align:center}
-  .eyebrow{
-    display:inline-flex;align-items:center;gap:8px;
-    background:#fff;border:1px solid var(--line);
-    padding:7px 14px;border-radius:999px;font-weight:700;font-size:.8rem;
-    color:var(--violet);box-shadow:var(--shadow-sm);
-  }
-  .eyebrow .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px var(--green-soft)}
-  h1.title{
-    font-size:clamp(2.3rem,5.5vw,4rem);line-height:1.05;letter-spacing:-.035em;
-    margin:.5em 0 .25em;font-weight:850;
-  }
-  .grad{
-    background:linear-gradient(110deg,var(--violet),var(--pink) 45%,var(--blue));
-    -webkit-background-clip:text;background-clip:text;color:transparent;
-  }
-  .lede{font-size:clamp(1.05rem,2vw,1.28rem);color:var(--ink-soft);max-width:720px;margin:0 auto}
-  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:30px}
-  .btn{
-    display:inline-flex;align-items:center;gap:9px;font-weight:700;font-size:.98rem;
-    padding:13px 22px;border-radius:12px;border:1px solid transparent;transition:.2s;cursor:pointer;
-  }
-  .btn-primary{
-    background:linear-gradient(135deg,var(--violet),var(--pink));color:#fff;
-    box-shadow:0 14px 30px -12px var(--violet);
-  }
-  .btn-primary:hover{transform:translateY(-2px);text-decoration:none;box-shadow:0 20px 38px -14px var(--violet)}
-  .btn-ghost{background:#fff;border-color:var(--line);color:var(--ink)}
-  .btn-ghost:hover{border-color:var(--violet);color:var(--violet);text-decoration:none;transform:translateY(-2px)}
+  /* ---------- Hero ---------- */
+  .hero{background:linear-gradient(180deg,var(--bg-alt),#fff);border-bottom:1px solid var(--g200);
+    padding:72px 0 64px;overflow:hidden}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+  .badge{display:inline-flex;align-items:center;gap:8px;background:var(--blue-50);color:var(--blue-dark);
+    font-size:13px;font-weight:500;padding:6px 12px;border-radius:999px;margin-bottom:22px}
+  .badge .d{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .hero h1{font-size:clamp(2rem,4vw,2.9rem);line-height:1.12;font-weight:500;letter-spacing:-.025em}
+  .hero h1 b{color:var(--blue);font-weight:500}
+  .hero p.sub{font-size:1.12rem;color:var(--g600);margin:20px 0 0;max-width:540px}
+  .hero-cta{display:flex;gap:12px;margin-top:30px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:500;
+    padding:11px 22px;border-radius:6px;cursor:pointer;border:1px solid transparent;transition:.15s}
+  .btn-fill{background:var(--blue);color:#fff;box-shadow:0 1px 2px rgba(60,64,67,.3)}
+  .btn-fill:hover{background:var(--blue-dark);text-decoration:none;box-shadow:0 1px 3px rgba(60,64,67,.4)}
+  .btn-out{background:#fff;border-color:var(--g300);color:var(--blue)}
+  .btn-out:hover{background:var(--blue-50);text-decoration:none}
+  .hero-meta{display:flex;gap:26px;margin-top:34px;flex-wrap:wrap}
+  .hero-meta div{font-size:13px;color:var(--g600)}
+  .hero-meta b{display:block;font-size:21px;color:var(--ink);font-weight:500;font-family:var(--mono)}
 
-  .chips{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:34px}
-  .chip{
-    background:#fff;border:1px solid var(--line);border-radius:999px;
-    padding:8px 15px;font-weight:600;font-size:.85rem;color:var(--ink-soft);
-    box-shadow:var(--shadow-sm);
-  }
-  .chip b{color:var(--ink)}
+  /* code window */
+  .term{background:var(--code-bg);border-radius:12px;box-shadow:0 24px 50px -20px rgba(32,33,36,.5);
+    overflow:hidden;border:1px solid #303134}
+  .term-bar{display:flex;align-items:center;gap:7px;padding:12px 14px;background:#292a2d;border-bottom:1px solid #3c4043}
+  .term-bar i{width:11px;height:11px;border-radius:50%;display:block}
+  .term-bar .t{margin-left:10px;color:#9aa0a6;font-size:12px;font-family:var(--mono)}
+  .term pre{margin:0;padding:18px 18px 20px;font-family:var(--mono);font-size:12.5px;line-height:1.75;
+    color:#e8eaed;overflow-x:auto;white-space:pre}
+  .term .cm{color:#9aa0a6}
+  .term .pr{color:#34a853}
+  .term .ky{color:#8ab4f8}
+  .term .st{color:#fdd663}
+  .term .pk{color:#f28b82}
+  .term .tx{color:#e8eaed}
+  .blink{display:inline-block;width:8px;height:15px;background:#8ab4f8;vertical-align:-2px;animation:bl 1.1s steps(2) infinite}
+  @keyframes bl{0%,50%{opacity:1}51%,100%{opacity:0}}
 
-  /* ===== Sections ===== */
-  section{padding:62px 0}
-  .sec-head{max-width:680px;margin:0 auto 44px;text-align:center}
-  .kicker{font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:.78rem;color:var(--pink)}
-  h2{font-size:clamp(1.7rem,3.5vw,2.5rem);letter-spacing:-.03em;margin:.3em 0 .35em;font-weight:820}
-  .sec-head p{color:var(--ink-soft);font-size:1.06rem;margin:0}
+  /* ---------- Sections ---------- */
+  section{padding:74px 0;border-bottom:1px solid var(--g200)}
+  section.alt{background:var(--bg-alt)}
+  .sec-tag{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--blue)}
+  .sec-head{max-width:760px;margin-bottom:44px}
+  .sec-head h2{font-size:clamp(1.5rem,2.6vw,2.1rem);margin:10px 0 12px;font-weight:500;letter-spacing:-.02em}
+  .sec-head p{font-size:1.06rem;color:var(--g600);margin:0}
 
-  /* reveal */
-  .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal{opacity:0;transform:translateY(14px);transition:opacity .55s ease,transform .55s ease}
   .reveal.in{opacity:1;transform:none}
 
-  /* ===== Layer ladder (module -> feature) ===== */
-  .ladder{display:flex;flex-direction:column;gap:18px;max-width:920px;margin:0 auto}
-  .layer{
-    position:relative;background:var(--card);border:1px solid var(--line);
-    border-radius:var(--radius);padding:22px 24px 22px 26px;box-shadow:var(--shadow-sm);
-    display:grid;grid-template-columns:54px 1fr;gap:20px;align-items:start;
-    transition:.25s;
-  }
-  .layer:hover{transform:translateY(-3px);box-shadow:var(--shadow);border-color:transparent}
-  .layer::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:5px;border-radius:6px;background:var(--accent,var(--violet))}
-  .layer .num{
-    width:54px;height:54px;border-radius:14px;display:grid;place-items:center;
-    font-weight:800;font-size:1.15rem;color:#fff;background:var(--accent,var(--violet));
-    box-shadow:0 10px 22px -10px var(--accent,var(--violet));
-  }
-  .layer h3{margin:2px 0 4px;font-size:1.18rem;letter-spacing:-.01em}
-  .layer .lvl{font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--accent,var(--violet))}
-  .layer p{margin:.45em 0 0;color:var(--ink-soft);font-size:.96rem}
-  .layer code{
-    background:var(--bg-2);border:1px solid var(--line);border-radius:6px;
-    padding:1px 7px;font-size:.82rem;color:var(--ink);font-family:"SFMono-Regular",Consolas,monospace;
-  }
-  .arrow-down{display:grid;place-items:center;color:var(--ink-soft);opacity:.55;font-size:1.3rem;margin:-6px 0}
+  /* ---------- Pillars ---------- */
+  .pillars{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+  .pillar{padding:24px;border:1px solid var(--g200);border-radius:var(--radius);background:#fff;transition:.18s}
+  .pillar:hover{box-shadow:0 6px 18px -10px rgba(60,64,67,.35);border-color:var(--g300)}
+  .pillar .ic{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;margin-bottom:16px;
+    background:var(--blue-50);color:var(--blue)}
+  .pillar h3{font-size:1.05rem;margin-bottom:7px}
+  .pillar p{font-size:.92rem;color:var(--g600);margin:0}
+  @media(max-width:900px){.pillars{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.pillars{grid-template-columns:1fr}}
 
-  /* ===== Module grid ===== */
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:18px}
-  .mod{
-    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-    padding:24px;box-shadow:var(--shadow-sm);transition:.25s;
-  }
-  .mod:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
-  .mod .ic{
-    width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:22px;margin-bottom:14px;
-    background:var(--soft,var(--violet-soft));
-  }
-  .mod h3{margin:0 0 6px;font-size:1.08rem}
-  .mod .path{font-family:Consolas,monospace;font-size:.78rem;color:var(--accent,var(--violet));font-weight:700;margin-bottom:10px;word-break:break-all}
-  .mod p{margin:0;color:var(--ink-soft);font-size:.92rem}
+  /* ---------- Architecture diagram ---------- */
+  .arch{background:#fff;border:1px solid var(--g200);border-radius:12px;padding:30px;overflow-x:auto}
+  .arch svg{display:block;margin:0 auto;min-width:760px}
 
-  /* ===== Pipeline flow ===== */
-  .flow{display:flex;flex-wrap:wrap;align-items:stretch;justify-content:center;gap:12px;max-width:980px;margin:0 auto}
-  .step{
-    flex:1 1 150px;min-width:150px;background:var(--card);border:1px solid var(--line);
-    border-radius:16px;padding:18px 16px;text-align:center;box-shadow:var(--shadow-sm);
-    position:relative;transition:.25s;
-  }
-  .step:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
-  .step .si{font-size:26px;margin-bottom:8px}
-  .step b{display:block;font-size:.98rem}
-  .step span{font-size:.82rem;color:var(--ink-soft)}
-  .flow .sep{display:grid;place-items:center;color:var(--violet);font-size:1.5rem;font-weight:800}
+  /* ---------- Module cards ---------- */
+  .mods{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .mod{border:1px solid var(--g200);border-radius:var(--radius);padding:22px;background:#fff;transition:.18s;display:flex;flex-direction:column}
+  .mod:hover{box-shadow:0 8px 22px -12px rgba(60,64,67,.4);transform:translateY(-2px)}
+  .mod-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .mod .ic{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;flex:none;
+    background:var(--tint,var(--blue-50));color:var(--tcol,var(--blue))}
+  .mod h3{font-size:1.02rem;line-height:1.2}
+  .mod .path{font-family:var(--mono);font-size:11.5px;color:var(--g500);margin-top:2px}
+  .mod p{font-size:.9rem;color:var(--g600);margin:0 0 14px}
+  .mod .facts{margin-top:auto;border-top:1px solid var(--g100);padding-top:12px;display:flex;flex-direction:column;gap:6px}
+  .mod .facts span{display:flex;justify-content:space-between;gap:10px;font-size:12.5px}
+  .mod .facts span .k{color:var(--g600)}
+  .mod .facts span .v{font-family:var(--mono);color:var(--ink);font-weight:500;text-align:right}
+  @media(max-width:900px){.mods{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.mods{grid-template-columns:1fr}}
 
-  /* ===== Feature cards ===== */
-  .feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
-  .fcard{
-    background:linear-gradient(160deg,#ffffff, #fbfcff);
-    border:1px solid var(--line);border-radius:var(--radius);padding:26px;
-    box-shadow:var(--shadow-sm);transition:.25s;position:relative;overflow:hidden;
-  }
-  .fcard::after{content:"";position:absolute;inset:0 0 auto auto;width:120px;height:120px;
-    background:radial-gradient(circle at 70% 30%,var(--glow,var(--violet-soft)),transparent 70%);opacity:.7}
-  .fcard:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
-  .fcard h3{margin:0 0 8px;font-size:1.14rem;position:relative}
-  .fcard .tag{font-size:1.6rem;margin-bottom:8px;display:block}
-  .fcard p{margin:0;color:var(--ink-soft);font-size:.95rem;position:relative}
+  /* ---------- Lifecycle ---------- */
+  .life{display:grid;grid-template-columns:1fr 1fr;gap:34px}
+  .flow{border:1px solid var(--g200);border-radius:12px;overflow:hidden;background:#fff}
+  .flow-h{padding:16px 22px;border-bottom:1px solid var(--g200);display:flex;align-items:center;gap:10px;font-weight:500;color:var(--ink)}
+  .flow-h .chip{margin-left:auto;font-size:11px;font-family:var(--mono);color:var(--g600);background:var(--g100);padding:3px 8px;border-radius:999px}
+  .steps{padding:8px 0}
+  .step{display:grid;grid-template-columns:30px 1fr;gap:14px;padding:13px 22px;position:relative}
+  .step .n{width:26px;height:26px;border-radius:50%;background:var(--blue-50);color:var(--blue-dark);
+    display:grid;place-items:center;font-size:12.5px;font-weight:700;font-family:var(--mono);z-index:1}
+  .step:not(:last-child)::before{content:"";position:absolute;left:34px;top:39px;bottom:-13px;width:2px;background:var(--g200)}
+  .step h4{font-size:.95rem;margin-bottom:2px}
+  .step p{font-size:.86rem;color:var(--g600);margin:0}
+  .step p code{background:var(--g100);padding:1px 5px;border-radius:4px;font-size:.82rem;color:var(--g700)}
+  @media(max-width:860px){.life{grid-template-columns:1fr}}
 
-  /* ===== Stack table ===== */
-  .stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
-  .scol{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm)}
-  .scol h4{margin:0 0 12px;font-size:.82rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft)}
-  .scol ul{margin:0;padding:0;list-style:none}
-  .scol li{padding:7px 0;border-top:1px dashed var(--line);font-size:.94rem;display:flex;justify-content:space-between;gap:10px}
+  /* ---------- Code block ---------- */
+  .code{background:var(--code-bg);border-radius:10px;overflow:hidden;border:1px solid #303134;margin:0}
+  .code-h{display:flex;align-items:center;gap:8px;padding:10px 16px;background:#292a2d;border-bottom:1px solid #3c4043}
+  .code-h .fn{font-family:var(--mono);font-size:12px;color:#9aa0a6}
+  .code-h .lang{margin-left:auto;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#5f6368;font-weight:700}
+  .code pre{margin:0;padding:18px;font-family:var(--mono);font-size:12.5px;line-height:1.7;color:#e8eaed;overflow-x:auto}
+  .code .c{color:#9aa0a6}.code .k{color:#c58af9}.code .f{color:#8ab4f8}
+  .code .s{color:#fdd663}.code .n{color:#f28b82}.code .o{color:#e8eaed}.code .b{color:#78d9ec}
+  .code-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:860px){.code-grid{grid-template-columns:1fr}}
+
+  /* ---------- Tables ---------- */
+  .tbl-wrap{border:1px solid var(--g200);border-radius:10px;overflow:hidden;background:#fff}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  thead th{background:var(--bg-alt);text-align:left;padding:13px 18px;font-weight:500;color:var(--g600);
+    font-size:12px;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid var(--g200)}
+  tbody td{padding:12px 18px;border-bottom:1px solid var(--g100);color:var(--g700);vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:var(--bg-alt)}
+  td .m,th .m{font-family:var(--mono)}
+  .verb{font-family:var(--mono);font-weight:700;font-size:11px;padding:3px 8px;border-radius:5px;display:inline-block;min-width:54px;text-align:center}
+  .v-get{background:#e6f4ea;color:var(--green)}
+  .v-post{background:var(--blue-50);color:var(--blue-dark)}
+  .v-del{background:#fce8e6;color:var(--red)}
+  td code{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:var(--g100);padding:1px 6px;border-radius:4px}
+  .pill{font-size:11px;font-family:var(--mono);padding:2px 8px;border-radius:999px;background:var(--g100);color:var(--g700)}
+
+  /* data model card */
+  .dm{display:grid;grid-template-columns:1.3fr 1fr;gap:24px;align-items:start}
+  @media(max-width:860px){.dm{grid-template-columns:1fr}}
+  .dm-note{border:1px solid var(--g200);border-radius:10px;background:#fff;padding:22px}
+  .dm-note h4{font-size:.98rem;margin-bottom:10px}
+  .dm-note ul{margin:0;padding-left:18px;color:var(--g600);font-size:.9rem}
+  .dm-note li{margin:7px 0}
+
+  /* stack */
+  .stack{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .scol{border:1px solid var(--g200);border-radius:10px;background:#fff;padding:20px}
+  .scol h4{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--g500);margin-bottom:14px}
+  .scol ul{list-style:none;margin:0;padding:0}
+  .scol li{padding:8px 0;border-top:1px solid var(--g100);font-size:13.5px;color:var(--g700)}
   .scol li:first-child{border-top:none}
-  .scol li span{color:var(--ink-soft);font-size:.85rem}
+  .scol li span{display:block;font-size:11.5px;color:var(--g500);font-family:var(--mono)}
+  @media(max-width:900px){.stack{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.stack{grid-template-columns:1fr}}
 
-  /* ===== Code block ===== */
-  .code{
-    background:#101329;color:#e7ebff;border-radius:var(--radius);padding:22px 24px;
-    font-family:"SFMono-Regular",Consolas,monospace;font-size:.88rem;line-height:1.7;
-    overflow:auto;box-shadow:var(--shadow);max-width:760px;margin:0 auto;
-  }
-  .code .c{color:#7e88c8}
-  .code .k{color:#ff9ed2}
-  .code .s{color:#88e0c8}
+  /* deploy */
+  .deploy{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .svc{border:1px solid var(--g200);border-radius:10px;background:#fff;padding:20px}
+  .svc .port{font-family:var(--mono);font-size:12px;color:#fff;background:var(--g700);padding:2px 8px;border-radius:5px;float:right}
+  .svc h4{font-size:1rem;margin-bottom:4px}
+  .svc .img{font-family:var(--mono);font-size:11.5px;color:var(--g500);margin-bottom:12px}
+  .svc p{font-size:.86rem;color:var(--g600);margin:0}
+  @media(max-width:760px){.deploy{grid-template-columns:1fr}}
 
-  /* ===== Footer ===== */
-  footer{padding:46px 0 60px;border-top:1px solid var(--line);margin-top:30px;text-align:center;color:var(--ink-soft)}
-  footer .brand{justify-content:center;margin-bottom:10px}
-
-  @media(max-width:560px){
-    .nav-links{display:none}
-    .layer{grid-template-columns:1fr;gap:12px}
-    .layer .num{width:46px;height:46px}
-  }
+  /* ---------- Footer ---------- */
+  footer{padding:48px 0;background:var(--bg-alt)}
+  .foot{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:center}
+  .foot p{margin:0;color:var(--g600);font-size:13.5px}
+  .foot .brand{color:var(--ink)}
 </style>
 </head>
 <body>
 
+<!-- NAV -->
 <header class="nav">
-  <div class="wrap nav-inner">
-    <div class="brand"><div class="logo">📄</div><span>Document&nbsp;Analysis</span></div>
+  <div class="wrap nav-in">
+    <span class="brand">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+        <rect x="3.5" y="2.5" width="13" height="17" rx="2" stroke="#1a73e8" stroke-width="1.6"/>
+        <path d="M6.5 7h7M6.5 10h7M6.5 13h4" stroke="#1a73e8" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="16.5" cy="16" r="4.2" fill="#fff" stroke="#1a73e8" stroke-width="1.6"/>
+        <path d="M19.4 18.9 22 21.5" stroke="#1a73e8" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      Document&nbsp;Analysis
+    </span>
     <nav class="nav-links">
-      <a href="#ladder">Module → Feature</a>
+      <a href="#overview">Overview</a>
+      <a href="#architecture">Architecture</a>
       <a href="#modules">Modules</a>
-      <a href="#pipeline">Pipeline</a>
-      <a href="#features">Features</a>
-      <a href="#stack">Stack</a>
+      <a href="#lifecycle">Request lifecycle</a>
+      <a href="#api">API</a>
+      <a href="#config">Config</a>
     </nav>
+    <div class="nav-right">
+      <a class="gh-btn" href="https://github.com/laavanjan/docIQ" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+    </div>
   </div>
 </header>
 
 <!-- HERO -->
-<section class="hero">
-  <div class="wrap">
-    <span class="eyebrow reveal"><span class="dot"></span> RAG over your PDFs · Claude + pgvector</span>
-    <h1 class="title reveal">Ask your documents <span class="grad">anything.</span></h1>
-    <p class="lede reveal">Upload a PDF, pick how it's read, and chat with it in natural language.
-       Every answer is grounded in your document, streamed token-by-token, and <b>cites the page it came from</b>.</p>
-    <div class="cta reveal">
-      <a class="btn btn-primary" href="#ladder">See how it works ↓</a>
-      <a class="btn btn-ghost" href="#pipeline">The pipeline</a>
+<section class="hero" style="border-bottom:none">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="badge"><span class="d"></span> Retrieval-Augmented Generation · Production architecture</span>
+      <h1>Ask questions about your PDFs and get <b>cited, grounded answers</b></h1>
+      <p class="sub">A two-tier platform that extracts documents three ways, embeds them locally, retrieves with
+        pgvector, and answers with Claude — falling back to OpenAI automatically. Every answer streams
+        token-by-token and cites the page it came from.</p>
+      <div class="hero-cta">
+        <a class="btn btn-fill" href="#architecture">Explore the architecture</a>
+        <a class="btn btn-out" href="#modules">Browse modules</a>
+      </div>
+      <div class="hero-meta">
+        <div><b>384-d</b>local embeddings</div>
+        <div><b>3</b>extraction engines</div>
+        <div><b>2</b>LLM providers</div>
+        <div><b>1</b>pgvector store</div>
+      </div>
     </div>
-    <div class="chips reveal">
-      <span class="chip"><b>Next.js 14</b> frontend</span>
-      <span class="chip"><b>FastAPI</b> backend</span>
-      <span class="chip"><b>Claude</b> → OpenAI fallback</span>
-      <span class="chip"><b>pgvector</b> retrieval</span>
-      <span class="chip"><b>Text · OCR · Vision</b> extraction</span>
+
+    <div class="term reveal">
+      <div class="term-bar">
+        <i style="background:#ee6a5f"></i><i style="background:#f5bd4f"></i><i style="background:#61c454"></i>
+        <span class="t">POST /api/v1/documents/{id}/query/stream</span>
+      </div>
+<pre><span class="cm"># Server-Sent Events — one `sources`, many `delta`, one `done`</span>
+<span class="pr">→</span> <span class="ky">data</span>: {<span class="st">"type"</span>:<span class="st">"sources"</span>,<span class="st">"sources"</span>:[
+       {<span class="st">"page_number"</span>:<span class="pk">4</span>,<span class="st">"score"</span>:<span class="pk">0.83</span>},
+       {<span class="st">"page_number"</span>:<span class="pk">7</span>,<span class="st">"score"</span>:<span class="pk">0.79</span>}]}
+
+<span class="pr">→</span> <span class="ky">data</span>: {<span class="st">"type"</span>:<span class="st">"delta"</span>,<span class="st">"text"</span>:<span class="st">"The closing"</span>}
+<span class="pr">→</span> <span class="ky">data</span>: {<span class="st">"type"</span>:<span class="st">"delta"</span>,<span class="st">"text"</span>:<span class="st">" balance is "</span>}
+<span class="pr">→</span> <span class="ky">data</span>: {<span class="st">"type"</span>:<span class="st">"delta"</span>,<span class="st">"text"</span>:<span class="st">"$4,210.55 [p.4]"</span>}
+
+<span class="pr">→</span> <span class="ky">data</span>: {<span class="st">"type"</span>:<span class="st">"done"</span>,<span class="st">"provider"</span>:<span class="st">"anthropic"</span>,
+       <span class="st">"model"</span>:<span class="st">"claude-sonnet-4-6"</span>,
+       <span class="st">"input_tokens"</span>:<span class="pk">1240</span>,<span class="st">"latency_ms"</span>:<span class="pk">915</span>}<span class="blink"></span></pre>
     </div>
   </div>
 </section>
 
-<!-- LADDER: single module -> high-level feature -->
-<section id="ladder">
+<!-- OVERVIEW / PILLARS -->
+<section id="overview">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="kicker">From the ground up</span>
-      <h2>One module climbing to one feature</h2>
-      <p>The same request travels up six layers — each a small, focused piece of code — until it becomes the experience you actually use.</p>
+      <span class="sec-tag">Overview</span>
+      <h2>One pipeline, four capabilities</h2>
+      <p>A Next.js client talks to a FastAPI backend over JSON, multipart, and SSE. Document text and its
+         vector embeddings live together in a single PostgreSQL + pgvector datastore.</p>
     </div>
-
-    <div class="ladder">
-      <div class="layer reveal" style="--accent:var(--blue)">
-        <div class="num">1</div>
-        <div>
-          <span class="lvl">Single module</span>
-          <h3>📐 Embeddings</h3>
-          <p><code>services/embeddings.py</code> — a local <b>fastembed</b> model (<code>bge-small-en-v1.5</code>, 384‑dim, ONNX on CPU). Turns any string into a vector. No API key, no GPU, no torch.</p>
-        </div>
+    <div class="pillars">
+      <div class="pillar reveal">
+        <div class="ic"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4h11l5 5v11a0 0 0 0 1 0 0H4z"/><path d="M14 4v6h6M8 14h8M8 17h5" stroke-linecap="round"/></svg></div>
+        <h3>Choose extraction</h3>
+        <p>Text (PyMuPDF), OCR (YOLOv8 + Tesseract), or Vision (page images → LLM) — selected per upload.</p>
       </div>
-      <div class="arrow-down reveal">↓</div>
-
-      <div class="layer reveal" style="--accent:var(--teal)">
-        <div class="num">2</div>
-        <div>
-          <span class="lvl">Storage primitive</span>
-          <h3>🗄️ Vector store</h3>
-          <p><code>services/vectorstore.py</code> — inserts those vectors into Postgres and runs one indexed cosine query (<code>embedding &lt;=&gt; :q</code>) with an <b>HNSW</b> index to fetch the top‑k nearest chunks.</p>
-        </div>
+      <div class="pillar reveal">
+        <div class="ic"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="7" cy="7" r="2.4"/><circle cx="17" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="M7 9.4v3M17 9.4v3M9 12h6"/></svg></div>
+        <h3>Embed locally</h3>
+        <p>fastembed (ONNX, CPU) turns chunks into 384-d vectors. No embedding API key, no GPU, no torch.</p>
       </div>
-      <div class="arrow-down reveal">↓</div>
-
-      <div class="layer reveal" style="--accent:var(--amber)">
-        <div class="num">3</div>
-        <div>
-          <span class="lvl">Provider abstraction</span>
-          <h3>🤖 LLM Router</h3>
-          <p><code>services/llm/router.py</code> — one <code>LLMProvider</code> interface behind a router that tries <b>Claude first</b> and transparently falls back to <b>OpenAI</b> — but only before the first streamed token, so an answer is never torn in half.</p>
-        </div>
+      <div class="pillar reveal">
+        <div class="ic"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="6" rx="7" ry="2.8"/><path d="M5 6v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6M5 12v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/></svg></div>
+        <h3>Retrieve with pgvector</h3>
+        <p>A single indexed cosine query over an HNSW index returns the top-k nearest chunks per document.</p>
       </div>
-      <div class="arrow-down reveal">↓</div>
-
-      <div class="layer reveal" style="--accent:var(--violet)">
-        <div class="num">4</div>
-        <div>
-          <span class="lvl">Orchestration</span>
-          <h3>🧠 RAG service</h3>
-          <p><code>services/rag.py</code> — embeds the question, retrieves chunks, builds a grounded prompt with <code>[p.N]</code> page markers, streams the answer, and logs provider, tokens &amp; latency to <code>query_logs</code>.</p>
-        </div>
+      <div class="pillar reveal">
+        <div class="ic"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z" stroke-linejoin="round"/><path d="M9 2.5v2M15 2.5v2M9 19.5v2M15 19.5v2M2.5 9h2M2.5 15h2M19.5 9h2M19.5 15h2" stroke-linecap="round"/></svg></div>
+        <h3>Generate &amp; cite</h3>
+        <p>Claude answers from retrieved context with <code>[p.N]</code> citations; OpenAI takes over on failure.</p>
       </div>
-      <div class="arrow-down reveal">↓</div>
+    </div>
+  </div>
+</section>
 
-      <div class="layer reveal" style="--accent:var(--pink)">
-        <div class="num">5</div>
-        <div>
-          <span class="lvl">API surface</span>
-          <h3>🔌 Streaming endpoint</h3>
-          <p><code>api/routes/query.py</code> — a thin controller exposes <code>POST /documents/{id}/query/stream</code> as <b>Server‑Sent Events</b>: one <code>sources</code> event, many <code>delta</code> events, one <code>done</code>.</p>
-        </div>
-      </div>
-      <div class="arrow-down reveal">↓</div>
+<!-- ARCHITECTURE -->
+<section id="architecture" class="alt">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">Architecture</span>
+      <h2>System design at a glance</h2>
+      <p>Thin API controllers delegate to focused services. Ingestion runs off the request path as a
+         background task; the LLM layer is provider-agnostic behind one interface.</p>
+    </div>
+    <div class="arch reveal">
+      <svg viewBox="0 0 920 360" width="100%" height="auto" font-family="Roboto, sans-serif">
+        <defs>
+          <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0 0L8 4.5L0 9z" fill="#80868b"/>
+          </marker>
+          <style>
+            .lbl{font-size:13px;fill:#202124;font-weight:500}
+            .sub{font-size:11px;fill:#5f6368;font-family:'Roboto Mono',monospace}
+            .grp{font-size:11px;fill:#80868b;font-weight:700;letter-spacing:.06em}
+            .ln{stroke:#80868b;stroke-width:1.4;fill:none;marker-end:url(#ah)}
+            .lnd{stroke:#bdc1c6;stroke-width:1.4;fill:none;stroke-dasharray:4 3;marker-end:url(#ah)}
+          </style>
+        </defs>
 
-      <div class="layer reveal" style="--accent:var(--green)">
-        <div class="num">6</div>
-        <div>
-          <span class="lvl">High-level feature</span>
-          <h3>💬 Chat with your document</h3>
-          <p>The <b>ChatPanel</b> in Next.js consumes the stream, rendering tokens live with a Sources panel and the answering provider. That's the whole journey — module&nbsp;1 made this possible.</p>
-        </div>
-      </div>
+        <!-- group frames -->
+        <rect x="14" y="40" width="180" height="280" rx="10" fill="#fff" stroke="#dadce0"/>
+        <text x="30" y="62" class="grp">CLIENT</text>
+        <rect x="250" y="40" width="400" height="280" rx="10" fill="#fff" stroke="#dadce0"/>
+        <text x="266" y="62" class="grp">FASTAPI BACKEND</text>
+        <rect x="706" y="40" width="200" height="280" rx="10" fill="#fff" stroke="#dadce0"/>
+        <text x="722" y="62" class="grp">DATA &amp; PROVIDERS</text>
+
+        <!-- client -->
+        <rect x="34" y="120" width="140" height="120" rx="8" fill="#e8f0fe" stroke="#1a73e8"/>
+        <text x="104" y="170" text-anchor="middle" class="lbl">Next.js 14</text>
+        <text x="104" y="190" text-anchor="middle" class="sub">App Router</text>
+        <text x="104" y="206" text-anchor="middle" class="sub">SSE client</text>
+
+        <!-- backend boxes -->
+        <rect x="270" y="80" width="170" height="48" rx="7" fill="#f1f3f4" stroke="#dadce0"/>
+        <text x="355" y="100" text-anchor="middle" class="lbl">REST API + SSE</text>
+        <text x="355" y="116" text-anchor="middle" class="sub">auth · documents · query</text>
+
+        <rect x="270" y="150" width="170" height="48" rx="7" fill="#f1f3f4" stroke="#dadce0"/>
+        <text x="355" y="170" text-anchor="middle" class="lbl">Ingestion pipeline</text>
+        <text x="355" y="186" text-anchor="middle" class="sub">extract→chunk→embed</text>
+
+        <rect x="270" y="220" width="170" height="48" rx="7" fill="#f1f3f4" stroke="#dadce0"/>
+        <text x="355" y="240" text-anchor="middle" class="lbl">RAG service</text>
+        <text x="355" y="256" text-anchor="middle" class="sub">retrieve→prompt→stream</text>
+
+        <rect x="470" y="115" width="160" height="48" rx="7" fill="#fef7e0" stroke="#e37400"/>
+        <text x="550" y="135" text-anchor="middle" class="lbl">LLM Router</text>
+        <text x="550" y="151" text-anchor="middle" class="sub">Claude → OpenAI</text>
+
+        <rect x="470" y="205" width="160" height="48" rx="7" fill="#e6f4ea" stroke="#188038"/>
+        <text x="550" y="225" text-anchor="middle" class="lbl">Embeddings</text>
+        <text x="550" y="241" text-anchor="middle" class="sub">fastembed · ONNX</text>
+
+        <!-- data -->
+        <rect x="726" y="120" width="160" height="60" rx="7" fill="#e8f0fe" stroke="#1a73e8"/>
+        <text x="806" y="145" text-anchor="middle" class="lbl">PostgreSQL</text>
+        <text x="806" y="163" text-anchor="middle" class="sub">+ pgvector (HNSW)</text>
+
+        <rect x="726" y="200" width="160" height="44" rx="7" fill="#f1f3f4" stroke="#dadce0"/>
+        <text x="806" y="227" text-anchor="middle" class="lbl">Anthropic / OpenAI</text>
+
+        <!-- links -->
+        <path class="ln" d="M174 180 H262"/>
+        <path class="ln" d="M440 104 H470 V120"/>
+        <path class="ln" d="M440 174 H452 V229 H466"/>
+        <path class="ln" d="M440 244 H452 V139 H466"/>
+        <path class="ln" d="M630 139 H700 V150 H722"/>
+        <path class="ln" d="M630 229 H700 V165 H722"/>
+        <path class="ln" d="M630 229 H660 V150 H722" opacity="0"/>
+        <path class="lnd" d="M806 180 V196"/>
+      </svg>
     </div>
   </div>
 </section>
@@ -328,156 +411,307 @@
 <section id="modules">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="kicker">The building blocks</span>
-      <h2>Every module, at a glance</h2>
-      <p>Thin controllers, all the logic in focused services. Here's what each piece owns.</p>
+      <span class="sec-tag">Core modules</span>
+      <h2>What each service owns</h2>
+      <p>Logic lives in <code style="font-family:var(--mono);font-size:.9em">backend/app/services/</code> — small, single-purpose modules with real, tunable defaults.</p>
     </div>
-    <div class="grid">
-      <div class="mod reveal" style="--accent:var(--blue);--soft:var(--blue-soft)">
-        <div class="ic">📝</div>
-        <h3>Text Extractor</h3>
-        <div class="path">extraction/text_extractor.py</div>
-        <p>PyMuPDF reads selectable text straight from digital PDFs. Fast and cheap.</p>
+    <div class="mods">
+
+      <div class="mod reveal" style="--tint:#e8f0fe;--tcol:#1a73e8">
+        <div class="mod-top">
+          <div class="ic"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 3h8l4 4v10H4z"/><path d="M11 3v5h5" stroke-linecap="round"/></svg></div>
+          <div><h3>Text Extractor</h3><div class="path">extraction/text_extractor.py</div></div>
+        </div>
+        <p>Reads selectable text straight from digital PDFs with PyMuPDF — the fast, zero-cost default path.</p>
+        <div class="facts">
+          <span><span class="k">Engine</span><span class="v">PyMuPDF</span></span>
+          <span><span class="k">Best for</span><span class="v">digital PDFs</span></span>
+        </div>
       </div>
-      <div class="mod reveal" style="--accent:var(--amber);--soft:var(--amber-soft)">
-        <div class="ic">🔍</div>
-        <h3>OCR Extractor</h3>
-        <div class="path">extraction/ocr_extractor.py</div>
-        <p>poppler → YOLOv8 layout detection → Tesseract per region. For scanned pages.</p>
+
+      <div class="mod reveal" style="--tint:#fef7e0;--tcol:#e37400">
+        <div class="mod-top">
+          <div class="ic"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7V4h3M17 4h3v3M20 13v3h-3M6 16H3v-3" stroke-linecap="round"/><path d="M6.5 10h7"/></svg></div>
+          <div><h3>OCR Extractor</h3><div class="path">extraction/ocr_extractor.py</div></div>
+        </div>
+        <p>Rasterises pages via poppler, runs YOLOv8 layout detection, then Tesseract per detected region.</p>
+        <div class="facts">
+          <span><span class="k">Layout</span><span class="v">yolov8n.pt</span></span>
+          <span><span class="k">Render DPI</span><span class="v">200</span></span>
+        </div>
       </div>
-      <div class="mod reveal" style="--accent:var(--pink);--soft:var(--pink-soft)">
-        <div class="ic">👁️</div>
-        <h3>Vision Extractor</h3>
-        <div class="path">extraction/vision_extractor.py</div>
-        <p>Sends page images to the LLM. Best for complex layouts, charts and tables.</p>
+
+      <div class="mod reveal" style="--tint:#fce8e6;--tcol:#d93025">
+        <div class="mod-top">
+          <div class="ic"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 10s3.5-5.5 8-5.5S18 10 18 10s-3.5 5.5-8 5.5S2 10 2 10Z"/><circle cx="10" cy="10" r="2.3"/></svg></div>
+          <div><h3>Vision Extractor</h3><div class="path">extraction/vision_extractor.py</div></div>
+        </div>
+        <p>Sends rendered page images directly to the LLM — best for complex layouts, charts, and scans.</p>
+        <div class="facts">
+          <span><span class="k">Render DPI</span><span class="v">150</span></span>
+          <span><span class="k">Best for</span><span class="v">tables · charts</span></span>
+        </div>
       </div>
-      <div class="mod reveal" style="--accent:var(--teal);--soft:var(--teal-soft)">
-        <div class="ic">✂️</div>
-        <h3>Chunking</h3>
-        <div class="path">services/chunking.py</div>
-        <p>Per-page recursive character splitter with overlap, preserving page numbers.</p>
+
+      <div class="mod reveal" style="--tint:#e6f4ea;--tcol:#188038">
+        <div class="mod-top">
+          <div class="ic"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 5h14M3 10h9M3 15h14" stroke-linecap="round"/></svg></div>
+          <div><h3>Chunking</h3><div class="path">services/chunking.py</div></div>
+        </div>
+        <p>Recursive character packer that splits per page on paragraphs then words, with carry-over overlap.</p>
+        <div class="facts">
+          <span><span class="k">Chunk size</span><span class="v">1000 chars</span></span>
+          <span><span class="k">Overlap</span><span class="v">150 chars</span></span>
+        </div>
       </div>
-      <div class="mod reveal" style="--accent:var(--violet);--soft:var(--violet-soft)">
-        <div class="ic">⚙️</div>
-        <h3>Ingestion Pipeline</h3>
-        <div class="path">services/pipeline.py</div>
-        <p>extract → chunk → embed → store, run off the request path as a background task.</p>
+
+      <div class="mod reveal" style="--tint:#e8f0fe;--tcol:#1a73e8">
+        <div class="mod-top">
+          <div class="ic"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="1.9"/><circle cx="14" cy="6" r="1.9"/><circle cx="10" cy="14" r="1.9"/><path d="M6 8v2M14 8v2M7.5 12 12.5 8M8 6h4"/></svg></div>
+          <div><h3>Embeddings</h3><div class="path">services/embeddings.py</div></div>
+        </div>
+        <p>Local fastembed model with asymmetric document / query encoders, loaded once and cached on disk.</p>
+        <div class="facts">
+          <span><span class="k">Model</span><span class="v">bge-small-en-v1.5</span></span>
+          <span><span class="k">Dimensions</span><span class="v">384</span></span>
+        </div>
       </div>
-      <div class="mod reveal" style="--accent:var(--green);--soft:var(--green-soft)">
-        <div class="ic">🔐</div>
-        <h3>Auth &amp; Security</h3>
-        <div class="path">core/security.py</div>
-        <p>JWT access + refresh tokens, password hashing, plus optional API-key access.</p>
+
+      <div class="mod reveal" style="--tint:#e8f0fe;--tcol:#1a73e8">
+        <div class="mod-top">
+          <div class="ic"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="10" cy="5" rx="6.5" ry="2.4"/><path d="M3.5 5v10c0 1.3 2.9 2.4 6.5 2.4s6.5-1.1 6.5-2.4V5M3.5 10c0 1.3 2.9 2.4 6.5 2.4s6.5-1.1 6.5-2.4"/></svg></div>
+          <div><h3>Vector store</h3><div class="path">services/vectorstore.py</div></div>
+        </div>
+        <p>Bulk-inserts chunks + embeddings and runs cosine-distance top-k search via the <code>&lt;=&gt;</code> operator.</p>
+        <div class="facts">
+          <span><span class="k">Index</span><span class="v">HNSW cosine</span></span>
+          <span><span class="k">Default top-k</span><span class="v">5</span></span>
+        </div>
       </div>
-      <div class="mod reveal" style="--accent:var(--blue);--soft:var(--blue-soft)">
-        <div class="ic">🧾</div>
-        <h3>Data Model</h3>
-        <div class="path">models/*.py</div>
-        <p>users · documents · chunks · query_logs — relational rows and vectors in one store.</p>
+
+      <div class="mod reveal" style="--tint:#fef7e0;--tcol:#e37400">
+        <div class="mod-top">
+          <div class="ic"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="12" height="12" rx="2.5"/><path d="M8 8h4v4H8z"/><path d="M8 2.5v1.5M12 2.5v1.5M8 16v1.5M12 16v1.5M2.5 8H4M2.5 12H4M16 8h1.5M16 12h1.5" stroke-linecap="round"/></svg></div>
+          <div><h3>LLM Router</h3><div class="path">services/llm/router.py</div></div>
+        </div>
+        <p>One provider interface; tries the primary, falls back on error — but only before the first streamed token.</p>
+        <div class="facts">
+          <span><span class="k">Primary</span><span class="v">claude-sonnet-4-6</span></span>
+          <span><span class="k">Fallback</span><span class="v">gpt-4o</span></span>
+        </div>
       </div>
-      <div class="mod reveal" style="--accent:var(--amber);--soft:var(--amber-soft)">
-        <div class="ic">🪢</div>
-        <h3>Correlation Logging</h3>
-        <div class="path">core/logging_config.py</div>
-        <p>Every request gets an id attached to all logs and returned as <code>X-Request-ID</code>.</p>
+
+      <div class="mod reveal" style="--tint:#f3e8fd;--tcol:#7b3ff2">
+        <div class="mod-top">
+          <div class="ic"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.6 2.6" stroke-linecap="round"/></svg></div>
+          <div><h3>RAG service</h3><div class="path">services/rag.py</div></div>
+        </div>
+        <p>Orchestrates retrieve → prompt (with <code>[p.N]</code> markers) → stream, and logs every answer.</p>
+        <div class="facts">
+          <span><span class="k">Citations</span><span class="v">[p.N] markers</span></span>
+          <span><span class="k">Audit</span><span class="v">query_logs</span></span>
+        </div>
+      </div>
+
+      <div class="mod reveal" style="--tint:#e6f4ea;--tcol:#188038">
+        <div class="mod-top">
+          <div class="ic"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="9" width="12" height="9" rx="2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9" /><circle cx="10" cy="13.5" r="1.2" fill="currentColor" stroke="none"/></svg></div>
+          <div><h3>Auth &amp; pipeline</h3><div class="path">core/security.py · pipeline.py</div></div>
+        </div>
+        <p>JWT access/refresh tokens scope every row to its owner; ingestion runs as a traced background task.</p>
+        <div class="facts">
+          <span><span class="k">Algorithm</span><span class="v">HS256</span></span>
+          <span><span class="k">Access TTL</span><span class="v">30 min</span></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- LIFECYCLE -->
+<section id="lifecycle" class="alt">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">Request lifecycle</span>
+      <h2>From upload to streamed answer</h2>
+      <p>Two flows compose the product: ingestion runs once per document; query runs on every question.</p>
+    </div>
+    <div class="life">
+      <div class="flow reveal">
+        <div class="flow-h">
+          <svg width="18" height="18" fill="none" stroke="#1a73e8" stroke-width="1.8"><path d="M9 12V3M5.5 6.5 9 3l3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12v3h12v-3" stroke-linecap="round"/></svg>
+          Ingestion <span class="chip">background task</span>
+        </div>
+        <div class="steps">
+          <div class="step"><div class="n">1</div><div><h4>Upload</h4><p><code>POST /documents</code> stores the file, inserts a row with <code>status=processing</code>, returns 201, and schedules <code>process_document</code>.</p></div></div>
+          <div class="step"><div class="n">2</div><div><h4>Extract</h4><p>The selected extractor (Text / OCR / Vision) returns a list of pages, each tagged with its page number.</p></div></div>
+          <div class="step"><div class="n">3</div><div><h4>Chunk</h4><p>Pages are split into ~1000-char overlapping chunks, preserving the source page for citations.</p></div></div>
+          <div class="step"><div class="n">4</div><div><h4>Embed &amp; store</h4><p>fastembed produces 384-d vectors; chunks + embeddings are bulk-inserted and <code>status</code> flips to <code>ready</code>.</p></div></div>
+        </div>
+      </div>
+
+      <div class="flow reveal">
+        <div class="flow-h">
+          <svg width="18" height="18" fill="none" stroke="#188038" stroke-width="1.8"><circle cx="8" cy="8" r="5"/><path d="m12 12 4 4" stroke-linecap="round"/></svg>
+          Query <span class="chip">SSE stream</span>
+        </div>
+        <div class="steps">
+          <div class="step"><div class="n">1</div><div><h4>Embed the question</h4><p>The same model encodes the question with its query encoder for an apples-to-apples comparison.</p></div></div>
+          <div class="step"><div class="n">2</div><div><h4>Top-k retrieval</h4><p>pgvector returns the nearest chunks by cosine distance; the <code>sources</code> event is emitted first.</p></div></div>
+          <div class="step"><div class="n">3</div><div><h4>Prompt &amp; generate</h4><p>Retrieved text is framed with <code>[p.N]</code> markers and streamed through Claude → OpenAI fallback.</p></div></div>
+          <div class="step"><div class="n">4</div><div><h4>Stream &amp; log</h4><p><code>delta</code> events carry tokens; a final <code>done</code> event reports provider, tokens, and latency to <code>query_logs</code>.</p></div></div>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- PIPELINE -->
-<section id="pipeline" style="background:linear-gradient(180deg,transparent,#ffffff70 40%,transparent)">
+<!-- CODE -->
+<section id="code">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="kicker">End to end</span>
-      <h2>From upload to cited answer</h2>
-      <p>Two flows make the whole product: ingestion (once per document) and query (every question).</p>
+      <span class="sec-tag">Inside the code</span>
+      <h2>The two functions that matter most</h2>
+      <p>Retrieval is one indexed query; resilience is one fallback loop that never tears a streamed answer.</p>
     </div>
+    <div class="code-grid">
+      <div class="code reveal">
+        <div class="code-h"><span class="fn">services/vectorstore.py</span><span class="lang">Python</span></div>
+<pre><span class="k">def</span> <span class="f">search</span>(db, *, owner_id, document_id, query_embedding, k):
+    <span class="c"># cosine distance via the pgvector &lt;=&gt; operator</span>
+    distance = Chunk.embedding.<span class="f">cosine_distance</span>(query_embedding)
+    stmt = (
+        <span class="f">select</span>(Chunk, distance.<span class="f">label</span>(<span class="s">"distance"</span>))
+        .<span class="f">where</span>(Chunk.owner_id == owner_id,
+               Chunk.document_id == document_id)
+        .<span class="f">order_by</span>(distance)   <span class="c"># HNSW index</span>
+        .<span class="f">limit</span>(k)             <span class="c"># default top-k = 5</span>
+    )
+    <span class="k">return</span> [RetrievedChunk(...) <span class="k">for</span> row <span class="k">in</span> db.<span class="f">execute</span>(stmt)]</pre>
+      </div>
 
-    <p class="reveal" style="text-align:center;font-weight:800;color:var(--violet);margin:0 0 16px">① Ingestion — when you upload</p>
-    <div class="flow reveal" style="margin-bottom:40px">
-      <div class="step"><div class="si">📤</div><b>Upload PDF</b><span>choose Text / OCR / Vision</span></div>
-      <div class="sep">→</div>
-      <div class="step"><div class="si">🔎</div><b>Extract</b><span>pages of text</span></div>
-      <div class="sep">→</div>
-      <div class="step"><div class="si">✂️</div><b>Chunk</b><span>with page numbers</span></div>
-      <div class="sep">→</div>
-      <div class="step"><div class="si">📐</div><b>Embed</b><span>fastembed vectors</span></div>
-      <div class="sep">→</div>
-      <div class="step"><div class="si">🗄️</div><b>Store</b><span>status → ready</span></div>
-    </div>
-
-    <p class="reveal" style="text-align:center;font-weight:800;color:var(--pink);margin:0 0 16px">② Query — when you ask</p>
-    <div class="flow reveal">
-      <div class="step"><div class="si">💬</div><b>Ask</b><span>your question</span></div>
-      <div class="sep">→</div>
-      <div class="step"><div class="si">📐</div><b>Embed query</b><span>same model</span></div>
-      <div class="sep">→</div>
-      <div class="step"><div class="si">🎯</div><b>Top-k search</b><span>pgvector cosine</span></div>
-      <div class="sep">→</div>
-      <div class="step"><div class="si">🤖</div><b>Generate</b><span>Claude → OpenAI</span></div>
-      <div class="sep">→</div>
-      <div class="step"><div class="si">📑</div><b>Stream + cite</b><span>[p.N] sources</span></div>
+      <div class="code reveal">
+        <div class="code-h"><span class="fn">services/llm/router.py</span><span class="lang">Python</span></div>
+<pre><span class="k">def</span> <span class="f">stream</span>(self, *, system, messages):
+    <span class="k">for</span> i, provider <span class="k">in</span> <span class="f">enumerate</span>(self.<span class="f">_ordered</span>()):
+        started = <span class="b">False</span>
+        <span class="k">try</span>:
+            <span class="k">for</span> chunk <span class="k">in</span> provider.<span class="f">stream</span>(...):
+                started = <span class="b">True</span>
+                <span class="k">yield</span> chunk
+            <span class="k">return</span>
+        <span class="k">except</span> Exception:
+            <span class="c"># once bytes are sent, never switch providers</span>
+            <span class="k">if</span> started: <span class="k">raise</span>
+            <span class="k">continue</span>   <span class="c"># else fall back to OpenAI</span></pre>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- The retrieval query -->
-<section>
+<!-- DATA MODEL -->
+<section id="data" class="alt">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="kicker">The heart of retrieval</span>
-      <h2>One indexed query does the work</h2>
-      <p>No separate vector database to keep in sync — chunks and their embeddings live together in Postgres.</p>
+      <span class="sec-tag">Data model</span>
+      <h2>Chunks: relational rows and vectors together</h2>
+      <p>The <code>chunks</code> table is both the source of truth for extracted text and the vector index used
+         for retrieval — so there is no second store to keep in sync.</p>
     </div>
-    <div class="code reveal">
-<span class="k">SELECT</span> * <span class="k">FROM</span> chunks
-<span class="k">WHERE</span> owner_id = :owner <span class="k">AND</span> document_id = :doc
-<span class="k">ORDER BY</span> embedding &lt;=&gt; :query_embedding   <span class="c">-- cosine distance, HNSW index</span>
-<span class="k">LIMIT</span> :k;
+    <div class="dm">
+      <div class="tbl-wrap reveal">
+        <table>
+          <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>id</code></td><td class="m">uuid</td><td>Primary key</td></tr>
+            <tr><td><code>document_id</code></td><td class="m">uuid</td><td>FK → documents, <span class="pill">ON DELETE CASCADE</span>, indexed</td></tr>
+            <tr><td><code>owner_id</code></td><td class="m">uuid</td><td>Denormalised — filter by user without a join</td></tr>
+            <tr><td><code>chunk_index</code></td><td class="m">int</td><td>Order within the document</td></tr>
+            <tr><td><code>page_number</code></td><td class="m">int</td><td>Drives <code>[p.N]</code> citations</td></tr>
+            <tr><td><code>content</code></td><td class="m">text</td><td>The chunk text</td></tr>
+            <tr><td><code>token_count</code></td><td class="m">int</td><td>~4 chars/token heuristic</td></tr>
+            <tr><td><code>embedding</code></td><td class="m">vector(384)</td><td><span class="pill">HNSW · cosine</span> index</td></tr>
+            <tr><td><code>meta</code></td><td class="m">jsonb</td><td>Extensible metadata</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="dm-note reveal">
+        <h4>The retrieval query</h4>
+        <div class="code" style="margin-bottom:18px">
+<pre><span class="k">SELECT</span> * <span class="k">FROM</span> chunks
+<span class="k">WHERE</span> owner_id = :owner
+  <span class="k">AND</span> document_id = :doc
+<span class="k">ORDER BY</span> embedding <span class="o">&lt;=&gt;</span> :q   <span class="c">-- cosine</span>
+<span class="k">LIMIT</span> :k;                <span class="c">-- HNSW</span></pre>
+        </div>
+        <h4>Related tables</h4>
+        <ul>
+          <li><b>users</b> — email, hashed password, active flag</li>
+          <li><b>documents</b> — filename, extraction_method, status, page/chunk counts, error</li>
+          <li><b>query_logs</b> — question, provider_used, model, input/output tokens, latency_ms</li>
+        </ul>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- FEATURES -->
-<section id="features">
+<!-- API -->
+<section id="api">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="kicker">Why it's nice to use</span>
-      <h2>High-level features</h2>
-      <p>Everything above adds up to a handful of things you actually feel.</p>
+      <span class="sec-tag">API reference</span>
+      <h2>REST endpoints</h2>
+      <p>All routes are mounted under <code>/api/v1</code> and require a Bearer token (except register / login).
+         Interactive docs are served at <code>/docs</code>.</p>
     </div>
-    <div class="feat">
-      <div class="fcard reveal" style="--glow:var(--violet-soft)">
-        <span class="tag">🎛️</span>
-        <h3>Pick your extraction</h3>
-        <p>Text, OCR or Vision — per upload. The speed‑vs‑robustness‑vs‑cost trade-off stays in your hands.</p>
-      </div>
-      <div class="fcard reveal" style="--glow:var(--pink-soft)">
-        <span class="tag">📑</span>
-        <h3>Cited, grounded answers</h3>
-        <p>Answers use only your document's context and cite <code>[p.N]</code>. If it isn't in the doc, it says so instead of inventing.</p>
-      </div>
-      <div class="fcard reveal" style="--glow:var(--blue-soft)">
-        <span class="tag">⚡</span>
-        <h3>Live streaming</h3>
-        <p>Tokens arrive over SSE as they're generated, with an expandable Sources panel and the provider that answered.</p>
-      </div>
-      <div class="fcard reveal" style="--glow:var(--amber-soft)">
-        <span class="tag">🛟</span>
-        <h3>Automatic fallback</h3>
-        <p>Claude is primary; if it errors or rate-limits before the first token, OpenAI takes over seamlessly.</p>
-      </div>
-      <div class="fcard reveal" style="--glow:var(--teal-soft)">
-        <span class="tag">🔐</span>
-        <h3>Multi-user &amp; secure</h3>
-        <p>JWT auth scopes every document and chunk to its owner — your files and questions stay yours.</p>
-      </div>
-      <div class="fcard reveal" style="--glow:var(--green-soft)">
-        <span class="tag">📊</span>
-        <h3>Observable by default</h3>
-        <p>Every answer logs provider, tokens and latency; every request carries a correlation id end to end.</p>
-      </div>
+    <div class="tbl-wrap reveal">
+      <table>
+        <thead><tr><th style="width:80px">Method</th><th>Path</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="verb v-post">POST</span></td><td><code>/auth/register</code></td><td>Create an account</td></tr>
+          <tr><td><span class="verb v-post">POST</span></td><td><code>/auth/login</code></td><td>Exchange credentials for access + refresh tokens</td></tr>
+          <tr><td><span class="verb v-post">POST</span></td><td><code>/auth/refresh</code></td><td>Mint a new access token from a refresh token</td></tr>
+          <tr><td><span class="verb v-get">GET</span></td><td><code>/auth/me</code></td><td>Current authenticated user</td></tr>
+          <tr><td><span class="verb v-post">POST</span></td><td><code>/documents</code></td><td>Upload a PDF (multipart: <code>file</code>, <code>method</code>) → starts ingestion</td></tr>
+          <tr><td><span class="verb v-get">GET</span></td><td><code>/documents</code></td><td>List the caller's documents (newest first)</td></tr>
+          <tr><td><span class="verb v-get">GET</span></td><td><code>/documents/{id}</code></td><td>Fetch one document's status &amp; counts</td></tr>
+          <tr><td><span class="verb v-get">GET</span></td><td><code>/documents/{id}/images</code></td><td>Figures extracted from pages (filter by <code>?pages=</code>)</td></tr>
+          <tr><td><span class="verb v-del">DEL</span></td><td><code>/documents/{id}</code></td><td>Delete a document (cascades to chunks)</td></tr>
+          <tr><td><span class="verb v-post">POST</span></td><td><code>/documents/{id}/query</code></td><td>Answer a question (full JSON response)</td></tr>
+          <tr><td><span class="verb v-post">POST</span></td><td><code>/documents/{id}/query/stream</code></td><td>Answer as an SSE stream: <code>sources</code> · <code>delta</code> · <code>done</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- CONFIG -->
+<section id="config" class="alt">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">Configuration</span>
+      <h2>Tunable defaults</h2>
+      <p>Every value is centralised in <code>core/config.py</code> (pydantic-settings) and overridable via
+         environment variables or <code>.env</code>.</p>
+    </div>
+    <div class="tbl-wrap reveal">
+      <table>
+        <thead><tr><th>Setting</th><th style="width:230px">Default</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>embedding_model</code></td><td class="m">BAAI/bge-small-en-v1.5</td><td>Local fastembed model</td></tr>
+          <tr><td><code>embedding_dim</code></td><td class="m">384</td><td>Vector width (migration-sensitive)</td></tr>
+          <tr><td><code>retrieval_top_k</code></td><td class="m">5</td><td>Chunks retrieved per query</td></tr>
+          <tr><td><code>chunk_size</code> / <code>chunk_overlap</code></td><td class="m">1000 / 150</td><td>Character packing for chunks</td></tr>
+          <tr><td><code>llm_primary</code></td><td class="m">anthropic</td><td>Provider tried first</td></tr>
+          <tr><td><code>anthropic_model</code></td><td class="m">claude-sonnet-4-6</td><td>Primary generation model</td></tr>
+          <tr><td><code>openai_model</code></td><td class="m">gpt-4o</td><td>Fallback generation model</td></tr>
+          <tr><td><code>llm_max_tokens</code></td><td class="m">2048</td><td>Answer length ceiling</td></tr>
+          <tr><td><code>max_upload_mb</code></td><td class="m">25</td><td>Upload size limit</td></tr>
+          <tr><td><code>ocr_dpi</code> / <code>vision_dpi</code></td><td class="m">200 / 150</td><td>Page render resolution</td></tr>
+          <tr><td><code>access / refresh expiry</code></td><td class="m">30 min / 7 days</td><td>JWT token lifetimes</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </section>
@@ -486,18 +720,18 @@
 <section id="stack">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="kicker">Under the hood</span>
-      <h2>The technology stack</h2>
-      <p>Two tiers, one datastore, provider-agnostic AI.</p>
+      <span class="sec-tag">Technology</span>
+      <h2>The stack</h2>
+      <p>Two tiers, one datastore, provider-agnostic AI — all runnable with a single Docker command.</p>
     </div>
     <div class="stack">
       <div class="scol reveal">
         <h4>Frontend</h4>
         <ul>
           <li>Next.js 14 <span>App Router</span></li>
-          <li>TypeScript <span>typed</span></li>
+          <li>TypeScript <span>typed client</span></li>
           <li>Tailwind CSS <span>styling</span></li>
-          <li>SSE client <span>live chat</span></li>
+          <li>Fetch + SSE <span>live chat</span></li>
         </ul>
       </div>
       <div class="scol reveal">
@@ -506,24 +740,24 @@
           <li>FastAPI <span>Python 3.11</span></li>
           <li>SQLAlchemy 2.0 <span>ORM</span></li>
           <li>Alembic <span>migrations</span></li>
-          <li>Background tasks <span>ingestion</span></li>
+          <li>pydantic-settings <span>config</span></li>
         </ul>
       </div>
       <div class="scol reveal">
-        <h4>AI &amp; Data</h4>
+        <h4>AI &amp; data</h4>
         <ul>
-          <li>Anthropic Claude <span>primary</span></li>
-          <li>OpenAI <span>fallback</span></li>
-          <li>fastembed <span>local embeds</span></li>
-          <li>PostgreSQL + pgvector <span>store</span></li>
+          <li>Anthropic Claude <span>primary LLM</span></li>
+          <li>OpenAI <span>fallback LLM</span></li>
+          <li>fastembed <span>ONNX embeds</span></li>
+          <li>PostgreSQL 16 <span>+ pgvector</span></li>
         </ul>
       </div>
       <div class="scol reveal">
-        <h4>Extraction &amp; Ops</h4>
+        <h4>Extraction &amp; ops</h4>
         <ul>
           <li>PyMuPDF <span>text</span></li>
           <li>YOLOv8 + Tesseract <span>OCR</span></li>
-          <li>Docker Compose <span>one command</span></li>
+          <li>Docker Compose <span>local stack</span></li>
           <li>GitHub Actions <span>CI</span></li>
         </ul>
       </div>
@@ -531,24 +765,51 @@
   </div>
 </section>
 
-<footer>
+<!-- DEPLOY -->
+<section id="deploy" class="alt">
   <div class="wrap">
-    <div class="brand"><div class="logo">📄</div><span>Document Analysis Platform</span></div>
-    <p>Upload · Extract · Embed · Retrieve · Answer — grounded in your documents, cited to the page.</p>
-    <p style="font-size:.85rem;opacity:.8">Built with Next.js · FastAPI · Claude · pgvector — provided as-is for internal / educational use.</p>
+    <div class="sec-head reveal">
+      <span class="sec-tag">Deployment</span>
+      <h2>One command, three containers</h2>
+      <p><code>docker compose up --build</code> brings up the full stack. The backend image bundles Tesseract +
+         poppler, and migrations run automatically on startup.</p>
+    </div>
+    <div class="deploy">
+      <div class="svc reveal">
+        <span class="port">:3000</span>
+        <h4>frontend</h4>
+        <div class="img">node:20</div>
+        <p>Next.js app, built with <code style="font-size:.85em">NEXT_PUBLIC_API_URL</code> baked in at build time.</p>
+      </div>
+      <div class="svc reveal">
+        <span class="port">:8000</span>
+        <h4>backend</h4>
+        <div class="img">python:3.11 + tesseract + poppler</div>
+        <p>FastAPI + Uvicorn. Volumes for uploads, logs, and the model cache (fastembed / YOLO downloads).</p>
+      </div>
+      <div class="svc reveal">
+        <span class="port">:5432</span>
+        <h4>postgres</h4>
+        <div class="img">pgvector/pgvector:pg16</div>
+        <p>Single datastore for users, documents, chunks &amp; vectors, and query logs. Persisted to a volume.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <p class="brand"><b>Document Analysis Platform</b> — RAG over PDFs with Claude, pgvector &amp; selectable extraction.</p>
+    <p>Next.js · FastAPI · PostgreSQL + pgvector · Provided as-is for internal / educational use.</p>
   </div>
 </footer>
 
 <script>
-  // Smooth scroll-reveal
   const obs = new IntersectionObserver((entries)=>{
-    entries.forEach((e,i)=>{
-      if(e.isIntersecting){
-        setTimeout(()=>e.target.classList.add('in'), (i%6)*60);
-        obs.unobserve(e.target);
-      }
+    entries.forEach((e)=>{
+      if(e.isIntersecting){ e.target.classList.add('in'); obs.unobserve(e.target); }
     });
-  },{threshold:.12, rootMargin:"0px 0px -40px 0px"});
+  },{threshold:.1, rootMargin:"0px 0px -30px 0px"});
   document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
 </script>
 </body>
